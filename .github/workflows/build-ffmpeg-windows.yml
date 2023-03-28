@@ -1,55 +1,55 @@
-name: Build FFmpeg For Win
+name: Build FFmpeg for Windows
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
   pull_request:
-    branches: [ master ]
 
 jobs:
   build-ffmpeg:
+    name: Build FFmpeg
     runs-on: windows-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Install MSYS2
-      shell: powershell
-      run: |
-        Invoke-WebRequest -Uri https://github.com/msys2/msys2-installer/releases/download/2021-06-28/msys2-x86_64-20210628.exe -OutFile msys2.exe
-        Start-Process .\msys2.exe -ArgumentList '/S' -Wait
-        rm .\msys2.exe
+      - name: Install Chocolatey
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force; `
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; `
+          iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
 
-    - name: Install dependencies
-      shell: bash
-      run: |
-        pacman --noconfirm -Syu
-        pacman --noconfirm -S git make mingw-w64-x86_64-toolchain mingw-w64-x86_64-nasm python3 yasm mercurial
+      - name: Install dependencies
+        run: choco install -y yasm nasm cmake git perl
 
-    - name: Set environment variables
-      shell: bash
-      run: |
-        export LC_ALL=C.UTF-8
-        export PATH=/mingw64/bin:$PATH
+      - name: Clone WebRTC repository
+        run: |
+          git clone https://chromium.googlesource.com/external/webrtc.git webrtc
 
-    - name: Clone FFmpeg repository
-      run: hg clone https://hg.ffmpeg.org/ffmpeg ffmpeg
+      - name: Build WebRTC
+        working-directory: ./webrtc
+        run: |
+          gclient sync --with_branch_heads --with_tags
+          gn gen out/Release "--args=is_debug=false is_component_build=false rtc_include_tests=false use_rtti=true"
+          ninja -C out/Release
 
-    - name: Configure FFmpeg with all features and WebRTC support
-      shell: bash
-      working-directory: ./ffmpeg
-      run: |
-        ./configure --enable-gpl --enable-version3 --enable-nonfree --enable-shared --enable-static --enable-openssl --enable-libsrt --enable-libzmq --enable-libx264 --enable-libx265 --enable-libvpx --enable-libaom --enable-libsvtav1 --enable-libdav1d --enable-librav1e --enable-pthreads --enable-runtime-cpudetect --enable-vaapi --enable-vdpau --enable-cuda-nvcc --enable-cuvid --enable-libnpp --enable-libmfx --enable-libdrm --enable-opencl --enable-amf --enable-frei0r --enable-libass --enable-libfreetype --enable-libfontconfig --enable-libfribidi --enable-libbluray --enable-libopenh264 --enable-libopenjpeg --enable-libwebp --enable-libmp3lame --enable-libopus --enable-libtheora --enable-libvorbis --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libgsm --enable-libilbc --enable-libvo-amrwbenc --enable-libwavpack --enable-libtwolame --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libflite --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopusenc --enable-libsnappy --enable-libsoxr --enable-libssh --enable-libtesseract --enable-libvidstab --enable-librubberband --enable-libzimg --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-zlib --enable-webrtc
+      - name: Clone FFmpeg repository
+        run: |
+          git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
-    - name: Compile FFmpeg
-      shell: bash
-      working-directory: ./ffmpeg
-      run: |
-        make -j4 && make install
+      - name: Configure FFmpeg
+        working-directory: ./ffmpeg
+        run: |
+          PKG_CONFIG_PATH="./webrtc/src/out/Release/lib/pkgconfig" ./configure --enable-gpl --enable-nonfree --enable-libvpx --enable-libaom --enable-libopus --enable-libvorbis --enable-libmp3lame --enable-libx264 --enable-libx265 --enable-libdav1d --enable-openssl --enable-libwebp --enable-libzimg --enable-libsvtav1 --enable-libopenh264 --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libass --enable-libbluray --enable-libdrm --enable-libmysofa --enable-libopenjpeg --enable-libxml2 --enable-lzma --enable-zlib --enable-runtime-cpudetect --enable-pthreads --enable-static --disable-shared
 
-    - name: Upload FFmpeg artifacts to GitHub
-      uses: actions/upload-artifact@v2
-      with:
-        name: ffmpeg-build
-        path: ${{ github.workspace }}/ffmpeg
+      - name: Build FFmpeg
+        working-directory: ./ffmpeg
+        run: make -j$(nproc)
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: ffmpeg-windows
+          path: ./ffmpeg
