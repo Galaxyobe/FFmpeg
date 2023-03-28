@@ -1,4 +1,4 @@
-name: Build FFmpeg for windows
+name: Build FFmpeg For Win
 
 on:
   push:
@@ -9,29 +9,47 @@ on:
 jobs:
   build-ffmpeg:
     runs-on: windows-latest
+
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-    - name: Install Git, Python and Ninja
+    - name: Install MSYS2
+      shell: powershell
       run: |
-        choco install -y git python ninja
+        Invoke-WebRequest -Uri https://github.com/msys2/msys2-installer/releases/download/2021-06-28/msys2-x86_64-20210628.exe -OutFile msys2.exe
+        Start-Process .\msys2.exe -ArgumentList '/S' -Wait
+        rm .\msys2.exe
 
-    - name: Clone FFmpeg source code
+    - name: Install dependencies
+      shell: bash
       run: |
-        git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
-        cd ffmpeg
-        git checkout master
+        pacman --noconfirm -Syu
+        pacman --noconfirm -S git make mingw-w64-x86_64-toolchain mingw-w64-x86_64-nasm python3 yasm mercurial
 
-    - name: Configure FFmpeg with WebRTC support
+    - name: Set environment variables
+      shell: bash
       run: |
-        python ./configure --enable-gpl --enable-version3 --enable-nonfree --enable-shared --enable-static --enable-libvorbis --enable-libopus --enable-libmp3lame --enable-libfdk-aac --enable-libx264 --enable-libx265 --enable-libvpx --enable-libaom --enable-libdav1d --enable-libwebp --enable-libsvtav1 --enable-libsrt --enable-libxml2 --enable-libzimg --enable-libbluray --disable-debug --extra-cflags=-w --extra-ldflags=-mwindows --enable-openssl --enable-webrtc --enable-nvenc --enable-cuda
+        export LC_ALL=C.UTF-8
+        export PATH=/mingw64/bin:$PATH
 
-    - name: Build FFmpeg with Ninja
+    - name: Clone FFmpeg repository
+      run: hg clone https://hg.ffmpeg.org/ffmpeg ffmpeg
+
+    - name: Configure FFmpeg with all features and WebRTC support
+      shell: bash
+      working-directory: ./ffmpeg
       run: |
-        ninja -C ./ffmpeg/build
+        ./configure --enable-gpl --enable-version3 --enable-nonfree --enable-shared --enable-static --enable-openssl --enable-libsrt --enable-libzmq --enable-libx264 --enable-libx265 --enable-libvpx --enable-libaom --enable-libsvtav1 --enable-libdav1d --enable-librav1e --enable-pthreads --enable-runtime-cpudetect --enable-vaapi --enable-vdpau --enable-cuda-nvcc --enable-cuvid --enable-libnpp --enable-libmfx --enable-libdrm --enable-opencl --enable-amf --enable-frei0r --enable-libass --enable-libfreetype --enable-libfontconfig --enable-libfribidi --enable-libbluray --enable-libopenh264 --enable-libopenjpeg --enable-libwebp --enable-libmp3lame --enable-libopus --enable-libtheora --enable-libvorbis --enable-libspeex --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libgsm --enable-libilbc --enable-libvo-amrwbenc --enable-libwavpack --enable-libtwolame --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libflite --enable-libgme --enable-libmodplug --enable-libopenmpt --enable-libopusenc --enable-libsnappy --enable-libsoxr --enable-libssh --enable-libtesseract --enable-libvidstab --enable-librubberband --enable-libzimg --enable-libzvbi --enable-lv2 --enable-sdl2 --enable-zlib --enable-webrtc
 
-    - name: Upload FFmpeg binaries to GitHub
+    - name: Compile FFmpeg
+      shell: bash
+      working-directory: ./ffmpeg
+      run: |
+        make -j4 && make install
+
+    - name: Upload FFmpeg artifacts to GitHub
       uses: actions/upload-artifact@v2
       with:
-        name: ffmpeg
-        path: ./ffmpeg/build
+        name: ffmpeg-build
+        path: ${{ github.workspace }}/ffmpeg
