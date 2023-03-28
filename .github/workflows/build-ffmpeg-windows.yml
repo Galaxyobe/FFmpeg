@@ -1,0 +1,64 @@
+name: Build FFmpeg with WebRTC support
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Set up MSYS2 environment
+        uses: msys2/setup-msys2@v3
+        with:
+          update: true
+
+      - name: Install required packages
+        run: |
+          pacman -S --noconfirm \
+            git mingw-w64-x86_64-toolchain mingw-w64-x86_64-ffmpeg \
+            mingw-w64-x86_64-cmake mingw-w64-x86_64-python3 \
+            unzip wget
+
+      - name: Clone FFmpeg and WebRTC repositories
+        run: |
+          git clone https://github.com/FFmpeg/FFmpeg.git
+          git clone https://chromium.googlesource.com/external/webrtc.git
+
+      - name: Apply WebRTC patches to FFmpeg
+        run: |
+          cd FFmpeg && \
+          patch -p1 < ../webrtc/patches/ffmpeg.patch && \
+          patch -p1 < ../webrtc/patches/libavutil/float_dsp.patch && \
+          patch -p1 < ../webrtc/patches/libavcodec/omx.c.patch
+
+      - name: Configure FFmpeg with WebRTC support
+        run: |
+          cd FFmpeg && \
+          ./configure --toolchain=msvc --arch=x86_64 --enable-gpl --enable-libvpx \
+            --enable-libopus --enable-libvorbis --enable-libmp3lame \
+            --enable-libass --enable-libfreetype --enable-libbluray \
+            --enable-libopenh265 --enable-libwebp --enable-librtmp \
+            --enable-libx264 --enable-libx265 --enable-nonfree \
+            --enable-decklink --enable-openssl --enable-libmysofa \
+            --enable-libzimg --enable-libgsm --enable-libaom \
+            --enable-libsvtav1 --enable-libdav1d --enable-libxvid \
+            --disable-static --enable-shared --extra-cflags=-fPIC \
+            --enable-webrtc
+
+      - name: Build FFmpeg with WebRTC support
+        run: |
+          cd FFmpeg && \
+          make -j$(nproc)
+
+      - name: Check FFmpeg build
+        run: |
+          cd FFmpeg && \
+          make check
+
+      - name: Validate FFmpeg binaries
+        run: |
+          cd FFmpeg && \
+          make tools/qt-faststart && \
+          ./tools/qt-faststart.exe -h
