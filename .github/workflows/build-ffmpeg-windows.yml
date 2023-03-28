@@ -1,4 +1,4 @@
-name: Build FFmpeg with WebRTC support
+name: Build FFmpeg with WebRTC support for Windows
 on:
   push:
     branches: [ master ]
@@ -9,24 +9,34 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Set up MSYS2 environment
-        uses: msys2/setup-msys2@v3
+      - uses: actions/checkout@v2
+
+      - name: Setup MSYS2 environment
+        uses: msys2/setup-msys2@master # 更改为 master 分支
         with:
           update: true
 
-      - name: Install required packages
+      - name: Install dependencies
         run: |
-          pacman -S --noconfirm \
-            git mingw-w64-x86_64-toolchain mingw-w64-x86_64-ffmpeg \
-            mingw-w64-x86_64-cmake mingw-w64-x86_64-python3 \
-            unzip wget
+          pacman -S --needed --noconfirm \
+            git make pkg-config diffutils wget tar yasm \
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 \
+            mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-openssl \
+            mingw-w64-x86_64-libwebp mingw-w64-x86_64-mpg123 \
+            mingw-w64-x86_64-x264 mingw-w64-x86_64-x265 \
+            mingw-w64-x86_64-libbluray mingw-w64-x86_64-libvpx \
+            mingw-w64-x86_64-libass mingw-w64-x86_64-libxml2 \
+            mingw-w64-x86_64-libiconv mingw-w64-x86_64-libvorbis \
+            mingw-w64-x86_64-libopus mingw-w64-x86_64-faad2 \
+            python python-pip unzip curl ninja cmake
+          pip install meson
 
       - name: Clone FFmpeg and WebRTC repositories
         run: |
           git clone https://github.com/FFmpeg/FFmpeg.git
           git clone https://chromium.googlesource.com/external/webrtc.git
 
-      - name: Apply WebRTC patches to FFmpeg
+      - name: Apply patches for WebRTC support
         run: |
           cd FFmpeg && \
           patch -p1 < ../webrtc/patches/ffmpeg.patch && \
@@ -36,16 +46,21 @@ jobs:
       - name: Configure FFmpeg with WebRTC support
         run: |
           cd FFmpeg && \
-          ./configure --toolchain=msvc --arch=x86_64 --enable-gpl --enable-libvpx \
-            --enable-libopus --enable-libvorbis --enable-libmp3lame \
-            --enable-libass --enable-libfreetype --enable-libbluray \
-            --enable-libopenh265 --enable-libwebp --enable-librtmp \
-            --enable-libx264 --enable-libx265 --enable-nonfree \
-            --enable-decklink --enable-openssl --enable-libmysofa \
-            --enable-libzimg --enable-libgsm --enable-libaom \
-            --enable-libsvtav1 --enable-libdav1d --enable-libxvid \
-            --disable-static --enable-shared --extra-cflags=-fPIC \
-            --enable-webrtc
+          PKG_CONFIG_PATH=/mingw64/lib/pkgconfig \
+          ./configure --pkg-config-flags="--static" \
+          --toolchain=msvc --arch=x86_64 --enable-gpl \
+          --enable-version3 --enable-shared --disable-static \
+          --enable-libopencore-amrnb --enable-libopencore-amrwb \
+          --enable-libvpx --enable-libopus --enable-libvorbis \
+          --enable-libmp3lame --enable-libx264 --enable-libx265 \
+          --enable-nonfree --enable-decklink --enable-nvenc \
+          --enable-d3d11va --enable-dxva2 --enable-libmfx \
+          --enable-openssl --enable-libmysofa --enable-libzimg \
+          --enable-libgsm --enable-libaom --enable-libsvtav1 \
+          --enable-libdav1d --enable-libopenjpeg \
+          --enable-libaribb24 --enable-libbluray --enable-libfreetype \
+          --enable-libass --enable-libzvbi --enable-libcaca \
+          --enable-libflite --enable-libvmaf --enable-webrtc
 
       - name: Build FFmpeg with WebRTC support
         run: |
