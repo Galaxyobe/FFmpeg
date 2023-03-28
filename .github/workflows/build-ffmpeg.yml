@@ -1,45 +1,92 @@
-name: Build FFmpeg with WebRTC support and upload artifact
+name: Build FFmpeg with WebRTC support and upload artifacts
 
 on:
   push:
     branches: [master]
 
 jobs:
-  build:
-    runs-on: windows-latest
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
       
       # Install dependencies
       - name: Install dependencies
         run: |
-          choco install nasm
-          choco install python --version=3.9.0
-          choco install strawberryperl
-          
-          set PYTHON=C:\Python39\python.exe
-          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-          set PATH=%PATH%;C:\path\to\depot_tools
-          gclient
-          ninja -C out/Release webrtc
-
+          sudo apt-get update
+          sudo apt-get install -y nasm libx264-dev libfdk-aac-dev libwebp-dev libopus-dev libvpx-dev libaom-dev libdav1d-dev pkg-config yasm
+      
       # Build FFmpeg with WebRTC support
       - name: Build FFmpeg with WebRTC support
         run: |
           cd ffmpeg
           ./configure --enable-gpl --enable-libx264 --enable-libfdk-aac --enable-libwebp --enable-libopus --enable-libvpx --extra-cflags="-I../webrtc/src" --extra-ldflags="-L../webrtc/src/out/Release/obj" --enable-librav1e --enable-libsvtav1 --enable-libdav1d --enable-libaom --enable-decklink
           make
-
-      # Create Windows executable
-      - name: Create Windows executable
-        run: |
-          cd ffmpeg
-          make install
-          zip -r ffmpeg.zip bin/
-
+          
       # Upload the FFmpeg executable
-      - name: Upload FFmpeg executable
+      - name: Upload FFmpeg executable for Linux
         uses: actions/upload-artifact@v2
         with:
-          name: ffmpeg-windows-x64.zip # Artifact name
-          path: ffmpeg/ffmpeg.zip # File path to upload
+          name: ffmpeg-linux.zip
+          path: ffmpeg/ffmpeg.zip
+      
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      
+      # Install dependencies and set up Depot Tools
+      - name: Install dependencies and set up Depot Tools
+        run: |
+          choco install nasm
+          choco install python --version=3.9.0
+          choco install strawberryperl
+          
+          $env:PYTHON="C:\Python39\python.exe"
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          $env:PATH += ";$(pwd)\depot_tools"
+          gclient
+          ninja -C out/Release webrtc
+      
+      # Build FFmpeg with WebRTC support
+      - name: Build FFmpeg with WebRTC support
+        run: |
+          cd ffmpeg
+          ./configure --enable-gpl --enable-libx264 --enable-libfdk-aac --enable-libwebp --enable-libopus --enable-libvpx --extra-cflags="-I../webrtc/src" --extra-ldflags="-L../webrtc/src/out/Release/obj" --enable-librav1e --enable-libsvtav1 --enable-libdav1d --enable-libaom --enable-decklink
+          make
+          
+      # Upload the FFmpeg executable
+      - name: Upload FFmpeg executable for Windows
+        uses: actions/upload-artifact@v2
+        with:
+          name: ffmpeg-windows.zip
+          path: ffmpeg/ffmpeg.zip
+          
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
+      # Install dependencies and set up Homebrew
+      - name: Install dependencies and set up Homebrew
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          brew update
+          brew install nasm x264 fdk-aac webp opus libvpx aom dav1d pkg-config
+          
+      # Build FFmpeg with WebRTC support
+      - name: Build FFmpeg with WebRTC support
+        run: |
+          cd ffmpeg
+          ./configure --enable-gpl --enable-libx264 --enable-libfdk-aac --enable-libwebp --enable-libopus --enable-libvpx --extra-cflags="-I../webrtc/src" --extra-ldflags="-L../webrtc/src/out/Release/obj" --enable-librav1e --enable-libsvtav1 --enable-libdav1d --enable-libaom --enable-decklink
+          make
+          
+      # Upload the FFmpeg executable
+      - name: Upload FFmpeg executable for macOS
+        uses: actions/upload-artifact@v2
+        with:
+          name: ffmpeg-macos.zip
+          path: ffmpeg/ffmpeg
