@@ -1,53 +1,45 @@
-name: Build FFmpeg with WebRTC support
+name: Build FFmpeg with WebRTC support and upload artifact
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        ffmpeg-version: [4.4]
-        target-env: ['dev', 'prod']
+    runs-on: windows-latest
     steps:
-
-      - name: Checkout Code
-        uses: actions/checkout@v2
-
-      - name: Install Dependencies
+      - uses: actions/checkout@v2
+      
+      # Install dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update && \
-          sudo apt-get install -y autoconf automake build-essential cmake git-core libass-dev \
-            libfreetype6-dev libsdl2-dev libtool libva-dev libvdpau-dev libvorbis-dev libxcb1-dev \
-            libxcb-shm0-dev libxcb-xfixes0-dev pkg-config texinfo wget zlib1g-dev nasm yasm \
-            libssl-dev libx264-dev libx265-dev libnuma-dev libvpx-dev libopus-dev libwebp-dev
+          choco install nasm
+          choco install python --version=3.9.0
+          choco install strawberryperl
+          
+          set PYTHON=C:\Python39\python.exe
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          set PATH=%PATH%;C:\path\to\depot_tools
+          gclient
+          ninja -C out/Release webrtc
 
-      - name: Clone WebRTC Source
+      # Build FFmpeg with WebRTC support
+      - name: Build FFmpeg with WebRTC support
         run: |
-          git clone https://webrtc.googlesource.com/src src
-          cd src
-          git checkout master
+          cd ffmpeg
+          ./configure --enable-gpl --enable-libx264 --enable-libfdk-aac --enable-libwebp --enable-libopus --enable-libvpx --extra-cflags="-I../webrtc/src" --extra-ldflags="-L../webrtc/src/out/Release/obj" --enable-librav1e --enable-libsvtav1 --enable-libdav1d --enable-libaom --enable-decklink
+          make
 
-      - name: Configure and Build FFmpeg
-        env:
-          TARGET_ENV: ${{ matrix.target-env }}
-          FFMPEG_VERSION: ${{ matrix.ffmpeg-version }}
+      # Create Windows executable
+      - name: Create Windows executable
         run: |
-          cd src/
-          ./tools_webrtc/install-build-deps.sh
-          mkdir build && cd build
-          ../configure --prefix=/usr/local --pkg-config-flags="--static" \
-            --enable-gpl --enable-libass --enable-libfreetype --enable-libopus --enable-libvorbis \
-            --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-nonfree \
-            --enable-openssl --enable-shared --enable-static
-          make -j$(nproc)
-          sudo make install
+          cd ffmpeg
+          make install
+          zip -r ffmpeg.zip bin/
 
-      - name: Archive Binaries
-        if: always()
+      # Upload the FFmpeg executable
+      - name: Upload FFmpeg executable
         uses: actions/upload-artifact@v2
         with:
-          name: ffmpeg-binaries-${{ matrix.target-env }}-${{ matrix.os }}
-          path: /usr/local/bin
+          name: ffmpeg-windows-x64.zip # Artifact name
+          path: ffmpeg/ffmpeg.zip # File path to upload
