@@ -1,0 +1,53 @@
+name: Build FFmpeg with WebRTC support
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        ffmpeg-version: [4.4]
+        target-env: ['dev', 'prod']
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y autoconf automake build-essential cmake git-core libass-dev \
+            libfreetype6-dev libsdl2-dev libtool libva-dev libvdpau-dev libvorbis-dev libxcb1-dev \
+            libxcb-shm0-dev libxcb-xfixes0-dev pkg-config texinfo wget zlib1g-dev nasm yasm \
+            libssl-dev libx264-dev libx265-dev libnuma-dev libvpx-dev libopus-dev libwebp-dev
+
+      - name: Clone WebRTC Source
+        run: |
+          git clone https://webrtc.googlesource.com/src src
+          cd src
+          git checkout master
+
+      - name: Configure and Build FFmpeg
+        env:
+          TARGET_ENV: ${{ matrix.target-env }}
+          FFMPEG_VERSION: ${{ matrix.ffmpeg-version }}
+        run: |
+          cd src/
+          ./tools_webrtc/install-build-deps.sh
+          mkdir build && cd build
+          ../configure --prefix=/usr/local --pkg-config-flags="--static" \
+            --enable-gpl --enable-libass --enable-libfreetype --enable-libopus --enable-libvorbis \
+            --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-nonfree \
+            --enable-openssl --enable-shared --enable-static
+          make -j$(nproc)
+          sudo make install
+
+      - name: Archive Binaries
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: ffmpeg-binaries-${{ matrix.target-env }}-${{ matrix.os }}
+          path: /usr/local/bin
