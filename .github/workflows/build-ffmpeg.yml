@@ -2,7 +2,7 @@ name: Build FFmpeg with WebRTC support and upload artifact
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build:
